@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as fn
-from . import functional as sf
+import functional as sf
 from torch.nn.parameter import Parameter
-from .utils import to_pair
+from utils import to_pair
 
 class Convolution(nn.Module):
     r"""Performs a 2D convolution over an input spike-wave composed of several input
@@ -56,7 +56,11 @@ class Convolution(nn.Module):
         self.weight.requires_grad_(False) # We do not use gradients
         self.reset_weight(weight_mean, weight_std)
 
-    def reset_weight(self, weight_mean=0.8, weight_std=0.02):
+        self.decay = 0.95
+        self.threshold = 10.0
+        self.reset = 0.0
+
+    def reset_weight(self, weight_mean=0.9, weight_std=0.02):
         """Resets weights to random values based on a normal distribution.
 
         Args:
@@ -74,7 +78,92 @@ class Convolution(nn.Module):
         self.weight.copy_(target)	
 
     def forward(self, input):
-        return fn.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        return fn.conv2d(
+            input, 
+            self.weight,
+            bias=None,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=self.groups
+            # self.decay,
+            # self.threshold,
+            # self.reset
+        )
+    
+    def Convolution_fast(self, input_spikes, weight, decay=0.9, threshold=10.0, reset=0.0):
+        """
+        Ultra-efficient temporal convolution using matrix operations
+        """
+        currents = fn.conv2d(input_spikes, weight)
+        
+        T, C_out, H_out, W_out = currents.shape
+        
+        # Create decay matrix
+        row_indices = torch.arange(T, device=input_spikes.device).unsqueeze(1)
+        col_indices = torch.arange(T, device=input_spikes.device).unsqueeze(0)
+        decay_matrix = torch.tril(decay ** (row_indices - col_indices))
+        
+        # Calculate potentials
+        currents_flat = currents.permute(0, 1, 2, 3).reshape(T, -1)
+        potentials_flat = decay_matrix @ currents_flat
+        potentials = potentials_flat.view(T, C_out, H_out, W_out)
+        
+        return currents
+
+
+class TransposedConvolution(nn.Module):
+    r"""Performs a 2D transposed convolution over an input spike-wave composed of several input
+    planes. Current version only supports stride of 1 with no padding.
+
+    The input is a 4D tensor with the size :math:`(T, C_{{in}}, H_{{in}}, W_{{in}})` and the crresponsing output
+    is of size :math:`(T, C_{{out}}, H_{{out}}, W_{{out}})`, 
+    where :math:`T` is the number of time steps, :math:`C` is the number of feature maps (channels), and
+    :math:`H`, and :math:`W` are the hight and width of the input/output planes.
+
+    * :attr:`in_channels` controls the number of input planes (channels/feature maps).
+
+    * :attr:`out_channels` controls the number of feature maps in the current layer.
+
+    * :attr:`kernel_size` controls the size of the convolution kernel. It can be a single integer or a tuple of two integers.
+
+    * :attr:`weight_mean` controls the mean of the normal distribution used for initial random weights.
+
+    * :attr:`weight_std` controls the standard deviation of the normal distribution used for initial random weights.
+
+    .. note::
+
+        Since this version of convolution does not support padding, it is the user responsibility to add proper padding
+        on the input before applying convolution.
+
+    Args:
+        in_channels (int): Number of channels in the input.
+        out_channels (int): Number of channels produced by the convolution.
+        kernel_size (int or tuple): Size of the convolving kernel.
+        weight_mean (float, optional): Mean of the initial random weights. Default: 0.8
+        weight_std (float, optional): Standard deviation of the initial random weights. Default: 0.02
+    """
+    def __init__(self, in_channels, out_channels, kernel_size, weight_mean=0.8, weight_std=0.02, padding=2):
+        super(TransposedConvolution, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = 1
+        self.padding = padding
+        self.output_padding = 0  # Add this if needed
+        
+        # Initialize weights like in the paper
+        self.weight = Parameter(torch.Tensor(out_channels, in_channels, kernel_size, kernel_size))
+        self.weight.data.normal_(weight_mean, weight_std)
+        self.bias = None
+        self.mem = None
+        
+    def forward(self, input):
+        # Use output_padding if needed to match exact dimensions
+        return fn.conv_transpose2d(input, self.weight, self.bias,
+                                 stride=self.stride,
+                                 padding=self.padding,
+                                 output_padding=self.output_padding)
 
 class Pooling(nn.Module):
     r"""Performs a 2D max-pooling over an input signal (spike-wave or potentials) composed of several input
@@ -181,45 +270,122 @@ class STDP(nn.Module):
         self.upper_bound = upper_bound
 
     def get_pre_post_ordering(self, input_spikes, output_spikes, winners):
-        r"""Computes the ordering of the input and output spikes with respect to the position of each winner and
-        returns them as a list of boolean tensors. True for pre-then-post (or concurrency) and False for post-then-pre.
-        Input and output tensors must be spike-waves.
-
-        Args:
-            input_spikes (Tensor): Input spike-wave
-            output_spikes (Tensor): Output spike-wave
-            winners (List of Tuples): List of winners. Each tuple denotes a winner in a form of a triplet (feature, row, column).
-
-        Returns:
-            List: pre-post ordering of spikes
         """
-        # accumulating input and output spikes to get latencies
-        input_latencies = torch.sum(input_spikes, dim=0)
-        output_latencies = torch.sum(output_spikes, dim=0)
+        Returns True for pre-then-post and False for post-then-pre.
+        Only considers spikes within a 10-timestep window before the post-synaptic spike.
+        
+        Args:
+            input_spikes: Input spike tensor (T, C, H, W)
+            output_spikes: Output spike tensor (T, F, H, W)
+            winners: List of winning neurons [(f, h, w), ...]
+        
+        Returns:
+            List of boolean tensors indicating valid pre-post timing relationships
+        """
+        # Get kernel dimensions
+        kH, kW = self.conv_layer.kernel_size[-2:]
+        TIME_WINDOW = 20
         result = []
-        for winner in winners:
-            # generating repeated output tensor with the same size of the receptive field
-            out_tensor = torch.ones(*self.conv_layer.kernel_size, device=output_latencies.device) * output_latencies[winner]
-            # slicing input tensor with the same size of the receptive field centered around winner
-            # since there is no padding, there is no need to shift it to the center
-            in_tensor = input_latencies[:,winner[-2]:winner[-2]+self.conv_layer.kernel_size[-2],winner[-1]:winner[-1]+self.conv_layer.kernel_size[-1]]
-            result.append(torch.ge(in_tensor,out_tensor))
+        
+        for out_time, f, h, w in winners:  # Now includes spike time
+            # Get receptive field only within the time window
+            h_start, w_start = h, w
+            window_start = max(0, out_time - TIME_WINDOW)
+            receptive_field = input_spikes[window_start:out_time, :,  
+                                         h_start:h_start+kH, 
+                                         w_start:w_start+kW]
+            
+            valid_timing = (receptive_field.sum(dim=(0,1)) > 0)
+            result.append(valid_timing)
+        
         return result
 
+        
     # simple STDP rule
     # gets prepost pairings, winners, weights, and learning rates (all shoud be tensors)
-    def forward(self, input_spikes, potentials, output_spikes, winners=None, kwta = 1, inhibition_radius = 0):
-        if winners is None:
-            winners = sf.get_k_winners(potentials, kwta, inhibition_radius, output_spikes)
-        pairings = self.get_pre_post_ordering(input_spikes, output_spikes, winners)
-        
-        lr = torch.zeros_like(self.conv_layer.weight)
-        for i in range(len(winners)):
-            f = winners[i][0]
-            lr[f] = torch.where(pairings[i], *(self.learning_rate[f]))
+    def forward(self, input_spikes, potentials, output_spikes, winners=None, kwta=1, decay=0.95, layer=None):
+        if len(winners) == 0:
+            print("Warning: No winners found!")
+            return
+            
+        # Get dimensions
+        kH, kW = self.conv_layer.kernel_size[-2:]
+        stride = self.conv_layer.stride
+        padding = self.conv_layer.padding
+        # Initialize weight updates ONCE outside the loop
+        weight_updates = torch.zeros_like(self.conv_layer.weight)
+        # Process each winner
+        for winner_idx, (out_time, f, h, w) in enumerate(winners):
+            # Convert output coordinates to input coordinates
+            h_c = int(h + (kH-1)/2-padding)
+            w_c = int(w + (kW-1)/2-padding)
+            # Pad input if necessary
+            padded_input = fn.pad(input_spikes, 
+                                (padding, padding, padding, padding))
+                
+            # Extract receptive field from padded input
+            receptive_field = padded_input[
+                0:out_time+1, :,  # All timesteps up to output spike, all channels
+                h_c-kH//2:h_c+kH//2+1,
+                w_c-kW//2:w_c+kW//2+1
+            ]
 
-        self.conv_layer.weight += lr * ((self.conv_layer.weight-self.lower_bound) * (self.upper_bound-self.conv_layer.weight) if self.use_stabilizer else 1)
-        self.conv_layer.weight.clamp_(self.lower_bound, self.upper_bound)
+            # Create temporal decay factors
+            time_steps = torch.arange(out_time+1, device=input_spikes.device)
+            decay_powers = out_time - time_steps  # Earlier spikes decay more
+            decay_factors = decay ** decay_powers
+            decay_multiplier = decay_factors.view(-1, 1, 1, 1)  # Shape for broadcasting
+
+            # Apply temporal decay to each time step
+            weighted_receptive_field = receptive_field * decay_multiplier
+            contribution = weighted_receptive_field.sum(0)  # Sum over time dimension
+            
+            # Get winning channels where spikes occurred
+            winner_in_ch = torch.argmax(contribution, dim=0)  # Shape: [kH, kW]
+            winner_in_ch = winner_in_ch.where(contribution.sum(0) > 0, torch.tensor(-1))
+            spike_mask = (contribution.sum(0) > 0)  # True where there are spikes
+
+            # Create channel selection matrix - True for all channels except winner
+            channel_indices = torch.arange(self.conv_layer.in_channels, device=winner_in_ch.device)
+
+          
+
+            mask = (~spike_mask) | (channel_indices.view(-1, 1, 1) != winner_in_ch)  # Shape: [C, kH, kW]
+
+
+            if self.use_stabilizer:
+                ltp_update = self.learning_rate[f][0] * (
+                    (self.conv_layer.weight[f] - self.lower_bound) *
+                    (self.upper_bound - self.conv_layer.weight[f])
+                )
+            else:
+                ltp_update = self.learning_rate[f][0]
+                
+            # Apply LTP only to winning channels
+            weight_updates[f].scatter_(0, 
+                winner_in_ch.unsqueeze(0), 
+                ltp_update
+            )
+            
+            # LTD: Decrease all weights where no spikes occurred
+            if self.use_stabilizer:
+                ltd_update = self.learning_rate[f][1] * (
+                    (self.conv_layer.weight[f] - self.lower_bound) *
+                    (self.upper_bound - self.conv_layer.weight[f])
+                )
+            else:
+                ltd_update = self.learning_rate[f][1]
+            # print("out_time", out_time)
+            # print("mask.true", mask.sum().item(), "out of", mask.numel())
+            # Apply LTD to all other channels (using the new mask)
+            weight_updates[f, mask] = ltd_update[mask]
+
+
+        
+        # Apply accumulated updates and clamp
+        with torch.no_grad():  # Ensure no gradients are tracked
+            self.conv_layer.weight.data = (self.conv_layer.weight + weight_updates).clamp_(self.lower_bound, self.upper_bound)
+
 
     def update_learning_rate(self, feature, ap, an):
         r"""Updates learning rate for a specific feature map.
@@ -242,3 +408,4 @@ class STDP(nn.Module):
         for feature in range(self.conv_layer.out_channels):
             self.learning_rate[feature][0][0] = ap
             self.learning_rate[feature][1][0] = an
+
