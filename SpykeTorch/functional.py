@@ -2,10 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fn
 import numpy as np
-# from .utils import to_pair
 
-# padding
-# pad = (padLeft, padRight, padTop, padBottom)
+
 def pad(input, pad, value=0):
     r"""Applies 2D padding on the input tensor.
 
@@ -59,46 +57,8 @@ def unpooling(input, kernel_size, stride=None, padding=0, switches=None, output_
     return result.to(device)
 
 
-# def fire(potentials, cumulative_potential, threshold=None, return_thresholded_potentials=False):
-#     r"""Computes the spike-wave tensor from tensor of potentials. If :attr:`threshold` is :attr:`None`, all the neurons
-#     emit one spike (if the potential is greater than zero) in the last time step.
 
-#     Args:
-#         potentials (Tensor): The tensor of input potentials.
-#         threshold (float): Firing threshold. Default: None
-#         return_thresholded_potentials (boolean): If True, the tensor of thresholded potentials will be returned
-#         as well as the tensor of spike-wave. Default: False
-
-#     Returns:
-#         Tensor: Spike-wave tensor.
-#     """
-#     if threshold is None:
-#         # Original behavior for no threshold
-#         thresholded = potentials.clone().detach()
-#         thresholded[:-1] = 0
-#         spikes = thresholded.sign()
-#     else:
-#         # Initialize outputs
-#         thresholded = potentials.clone().detach()
-#         spikes = torch.zeros_like(thresholded)
-        
-        
-#         # Generate spikes
-#         spikes = torch.where(
-#             cumulative_potential >= threshold,
-#             (cumulative_potential % threshold < thresholded).float(),
-#             torch.zeros_like(thresholded)
-#         )
-        
-#         # Update thresholded potentials
-#         spike_sum = torch.cumsum(spikes, dim=0)
-#         thresholded = cumulative_potential - (spike_sum * threshold)
-
-#     if return_thresholded_potentials:
-#         return spikes, thresholded
-#     return spikes
-
-def fire(currents, decay, threshold, reset=0.0):
+def fire(currents, decay, threshold):
     """
     Compute spikes and potentials with decay and reset.
 
@@ -129,10 +89,6 @@ def fire(currents, decay, threshold, reset=0.0):
         
         # Generate spikes
         spikes[t] = (V >= threshold).float()
-
-        # Decrease potential by threshold where spikes occurred, ensure non-negative
-        # V = torch.where(spikes[t] > 0, V - threshold, V)
-        # V = torch.clamp(V, min=0.0)  # Ensure potential doesn't go below 0
 
     return spikes, potentials
 
@@ -197,7 +153,6 @@ def pointwise_inhibition(thresholded_potentials):
         Tensor: Inhibited potentials where only the winning neuron at each position retains its value
     """
     # Get maximum potential across features at each position and timestep
-    # Shape: [timesteps, 1, height, width]
     max_potentials, feature_indices = torch.max(thresholded_potentials, dim=1, keepdim=True)
     
     # Convert to spike indicators (0 or 1)
@@ -206,7 +161,6 @@ def pointwise_inhibition(thresholded_potentials):
     # For each position, find the first timestep where any neuron spikes
     # Shape: [1, 1, height, width]
     first_spike_times = torch.argmax(spike_indicators, dim=0, keepdim=True)
-    # print(f'first_spike_times: {first_spike_times}')
     
     # Get the feature indices at the first spike times
     # Shape: [1, 1, height, width]
@@ -221,8 +175,6 @@ def pointwise_inhibition(thresholded_potentials):
     feature_indices = torch.arange(thresholded_potentials.size(1), device=thresholded_potentials.device)
     feature_indices = feature_indices.view(1, -1, 1, 1)
     inhibition_mask = (feature_indices == winning_features).float()
-    # print(f'thresholded_potentials: {thresholded_potentials.sum().item()}')
-    # print(f'inhibition_mask: {(thresholded_potentials * inhibition_mask).sum().item()}')
     # Apply inhibition mask to all timesteps
     return thresholded_potentials * inhibition_mask
 
@@ -286,52 +238,8 @@ def get_k_winners(potentials, kwta=1, inhibition_radius=0, spikes=None, input_sp
                 break
                 
             f, h, w = np.unravel_index(max_idx.item(), pot_values.shape)
-            
-            # # Extract the receptive field pattern for this potential winner
 
-            # #TODO:match with the receptive field of the input spikes
-            # current_pattern = input_spikes[current_time-5:current_time+1, :, 
-            #                       max(0, h-2):min(H, h+2+1),
-            #                       max(0, w-2):min(W, w+2+1)]
-            
-            # # Check similarity with previous winners
-            # is_similar = False
-            # for prev_pattern in winner_patterns:
-            #     if prev_pattern.shape == current_pattern.shape:
-            #         # First convert temporal-spatial spike pattern to binary activation map
-            #         current_active = current_pattern.sum(dim=0).bool()  # Sum across time, then convert to binary
-            #         prev_active = prev_pattern.sum(dim=0).bool()
-
-                    
-            #         # Compute intersection over union (IoU)
-            #         intersection = (current_active & prev_active).float().sum()
-            #         union = (current_active | prev_active).float().sum()
-                    
-            #         similarity = intersection / (union + 1e-6)
-                    
-            #         if similarity > similarity_threshold:
-            #             is_similar = True
-            #             # torch.set_printoptions(threshold=10_000)
-            #             # print(f'similarity: {similarity}')
-            #             # print(f'current_pattern.shape: {current_pattern_orig.shape}')
-            #             # print(f'current_pattern: {current_pattern_orig}')
-            #             # print(f'Pattern shapes: {current_pattern.shape}')
-            #             # print(f'Active locations in current: {current_active.sum().item()}')
-            #             # print(f'Active locations in previous: {prev_active.sum().item()}')
-            #             # print(f'prev_pattern: {prev_pattern}')
-
-            #             break
-
-            
-            # # If pattern is too similar, inhibit this location and continue
-            # if is_similar:
-            #     pot_values[f, h, w] = 0
-            #     continue
-
-
-            # If we reach here, pattern is sufficiently different
             winners.append((current_time, f, h, w))
-            # winner_patterns.append(current_pattern)
             spike_times.append(current_time)
             
             # Apply inhibition
@@ -342,7 +250,6 @@ def get_k_winners(potentials, kwta=1, inhibition_radius=0, spikes=None, input_sp
                 w_end = min(W, w + inhibition_radius + 1)
                 pot_values[:, h_start:h_end, w_start:w_end] = 0
 
-            # pot_values[f, :, :] = 0
 
     if verbose:
         if len(winners) == 0:
