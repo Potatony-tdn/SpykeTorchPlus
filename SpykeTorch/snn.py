@@ -53,7 +53,7 @@ class Convolution(nn.Module):
 
         # Parameters
         self.weight = Parameter(torch.Tensor(self.out_channels, self.in_channels, *self.kernel_size))
-        self.weight.requires_grad_(False) # We do not use gradients
+        self.weight.requires_grad_(False)
         self.reset_weight(weight_mean, weight_std)
 
         self.decay = 0.95
@@ -86,30 +86,7 @@ class Convolution(nn.Module):
             padding=self.padding,
             dilation=self.dilation,
             groups=self.groups
-            # self.decay,
-            # self.threshold,
-            # self.reset
         )
-    
-    def Convolution_fast(self, input_spikes, weight, decay=0.9, threshold=10.0, reset=0.0):
-        """
-        Ultra-efficient temporal convolution using matrix operations
-        """
-        currents = fn.conv2d(input_spikes, weight)
-        
-        T, C_out, H_out, W_out = currents.shape
-        
-        # Create decay matrix
-        row_indices = torch.arange(T, device=input_spikes.device).unsqueeze(1)
-        col_indices = torch.arange(T, device=input_spikes.device).unsqueeze(0)
-        decay_matrix = torch.tril(decay ** (row_indices - col_indices))
-        
-        # Calculate potentials
-        currents_flat = currents.permute(0, 1, 2, 3).reshape(T, -1)
-        potentials_flat = decay_matrix @ currents_flat
-        potentials = potentials_flat.view(T, C_out, H_out, W_out)
-        
-        return currents
 
 
 class TransposedConvolution(nn.Module):
@@ -150,9 +127,8 @@ class TransposedConvolution(nn.Module):
         self.kernel_size = kernel_size
         self.stride = 1
         self.padding = padding
-        self.output_padding = 0  # Add this if needed
+        self.output_padding = 0
         
-        # Initialize weights like in the paper
         self.weight = Parameter(torch.Tensor(out_channels, in_channels, kernel_size, kernel_size))
         self.weight.data.normal_(weight_mean, weight_std)
         self.bias = None
@@ -268,37 +244,6 @@ class STDP(nn.Module):
         self.use_stabilizer = use_stabilizer
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
-
-    def get_pre_post_ordering(self, input_spikes, output_spikes, winners):
-        """
-        Returns True for pre-then-post and False for post-then-pre.
-        Only considers spikes within a 10-timestep window before the post-synaptic spike.
-        
-        Args:
-            input_spikes: Input spike tensor (T, C, H, W)
-            output_spikes: Output spike tensor (T, F, H, W)
-            winners: List of winning neurons [(f, h, w), ...]
-        
-        Returns:
-            List of boolean tensors indicating valid pre-post timing relationships
-        """
-        # Get kernel dimensions
-        kH, kW = self.conv_layer.kernel_size[-2:]
-        TIME_WINDOW = 20
-        result = []
-        
-        for out_time, f, h, w in winners:  # Now includes spike time
-            # Get receptive field only within the time window
-            h_start, w_start = h, w
-            window_start = max(0, out_time - TIME_WINDOW)
-            receptive_field = input_spikes[window_start:out_time, :,  
-                                         h_start:h_start+kH, 
-                                         w_start:w_start+kW]
-            
-            valid_timing = (receptive_field.sum(dim=(0,1)) > 0)
-            result.append(valid_timing)
-        
-        return result
 
         
     # simple STDP rule
