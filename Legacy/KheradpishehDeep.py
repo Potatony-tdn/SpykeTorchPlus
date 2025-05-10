@@ -20,10 +20,10 @@ from torchvision.datasets import ImageFolder
 from torch.nn.parameter import Parameter
 import torchvision
 import numpy as np
-from SpykeTorch import snn
-from SpykeTorch import functional as sf
-from SpykeTorch import visualization as vis
-from SpykeTorch import utils
+from SpykeTorchPlus import snn
+from SpykeTorchPlus import functional as sf
+from SpykeTorchPlus import visualization as vis
+from SpykeTorchPlus import utils
 from torchvision import transforms
 
 use_cuda = True

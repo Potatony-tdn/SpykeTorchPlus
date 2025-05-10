@@ -22,8 +22,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.nn.parameter import Parameter
 import numpy as np
-import SpykeTorch.snn as snn
-import SpykeTorch.functional as sf
+import SpykeTorchPlus.snn as snn
+import SpykeTorchPlus.functional as sf
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from datetime import datetime

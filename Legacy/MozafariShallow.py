@@ -20,10 +20,10 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.datasets import ImageFolder
 import numpy as np
-from SpykeTorch import snn
-from SpykeTorch import functional as sf
-from SpykeTorch import visualization as vis
-from SpykeTorch import utils
+from SpykeTorchPlus import snn
+from SpykeTorchPlus import functional as sf
+from SpykeTorchPlus import visualization as vis
+from SpykeTorchPlus import utils
 from torchvision import transforms
 
 class Mozafari2018(nn.Module):
