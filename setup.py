@@ -15,11 +15,11 @@ def get_requirements():
 
     
 setuptools.setup(
-    name="SpykeTorch-miladmozafari", # Replace with your own username
+    name="SpykeTorchPlus", # Replace with your own username
     version=version,
-    author="miladmozafari",
+    author="Muxiao Liu",
     author_email="",
-    description="High-speed simulator of convolutional spiking neural networks with at most one spike per neuron.",
+    description="description="Enhanced simulator of spiking convolutional neural networks with realistic event data support, temporal dynamics, and extended STDP.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="", # write github url,
