@@ -1,13 +1,32 @@
 ###################################################################################
-# Reimplementation of the Digit Recognition Experiment (MNIST) Performed in:      #
-# https://www.sciencedirect.com/science/article/pii/S0893608017302903             #
+# Enhanced Implementation of:                                                     #
+# "STDP-based spiking deep convolutional neural networks for object recognition"  #
+# Original paper: https://arxiv.org/abs/1611.01421                                #
 #                                                                                 #
 # Reference:                                                                      #
 # Kheradpisheh, Saeed Reza, et al.                                                #
 # "STDP-based spiking deep convolutional neural networks for object recognition." #
 # Neural Networks 99 (2018): 56-67.                                               #
 #                                                                                 #
+# This enhanced version includes:                                                 #
+# - Support for N-Caltech101 dataset                                              #
+# - Extended STDP learning capabilities                                           #
+# - Improved temporal dynamics                                                    #
+# - Enhanced visualization and monitoring tools                                   #
+#                                                                                 #
+# Dataset Attribution:                                                            #
+# The N-Caltech101 dataset used in this code is based on the original Caltech101  #
+# dataset and was created by Garrick Orchard et al. The dataset is released under #
+# the Creative Commons Attribution 4.0 license.                                   #
+#                                                                                 #
+# Reference:                                                                      #
+# Orchard, G.; Cohen, G.; Jayawant, A.; and Thakor, N. "Converting Static Image   #
+# Datasets to Spiking Neuromorphic Datasets Using Saccades", Frontiers in         #
+# Neuroscience, vol.9, no.437, Oct. 2015                                          #
+#                                                                                 #
+# Dataset available at: https://www.garrickorchard.com/datasets/n-caltech101      #
 ###################################################################################
+
 from sys import exit
 
 import sys
@@ -562,7 +581,7 @@ class EventDataset(Dataset):
         return self.cached_data[idx], self.cached_labels[idx]
 
 # Create and analyze dataset
-data_root = "/Caltech101"
+data_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dataset")
 full_dataset = EventDataset(data_root)
 
 # Split dataset into train and test sets
