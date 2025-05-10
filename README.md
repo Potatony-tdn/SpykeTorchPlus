@@ -1,32 +1,53 @@
-# SpykeTorch
-High-speed simulator of convolutional spiking neural networks with at most one spike per neuron.
+# SpykeTorch+
 
-<img src="https://raw.githubusercontent.com/miladmozafari/SpykeTorch/master/logo.png" alt="alt text" width=50%>
+**SpykeTorch+** is a significantly modified fork of [SpykeTorch](https://github.com/miladmozafari/SpykeTorch), a high-speed simulator of convolutional spiking neural networks (SNNs) in which neurons emit at most one spike per stimulus.
 
-SpykeTorch is a PyTorch-based simulator of convolutional spiking neural networks, in which the neurons emit at most one spike per stimulus. SpykeTorch supports STDP and Reward-modulated STDP learning rules. The current code is the early object oriented version of this simulator and you can find the documentation in docs folder in PDF format or in our lab website (http://cnrl.ut.ac.ir/SpykeTorch/doc/) in HTML format. Since SpykeTorch is fully compatible with PyTorch, you can easily use it if you know PyTorch. A tutorial is available in the paper titled "SpykeTorch: Efficient Simulation of Convolutional Spiking Neural Networks with at most one Spike per Neuron" which introduces the SpykeTorch package (https://www.frontiersin.org/articles/10.3389/fnins.2019.00625/full).
+This enhanced version addresses the limitations of the original code in handling realistic event-based datasets, such as those from event cameras (e.g., N-Caltech101), by introducing new dynamics, rewrites, and experimental techniques aimed at better capturing temporal patterns and optic flow.
 
-**IMPORTANT**: Current version of SpykeTorch does not support negative synaptic weights.
+<div align="center">
+  <img src="https://raw.githubusercontent.com/miladmozafari/SpykeTorch/master/logo.png" alt="SpykeTorch logo" width="50%">
+</div>
 
-To setup this package, you can install Anaconda or Miniconda
-```
-# Clone the repository
-git clone https://github.com/miladmozafari/SpykeTorch
+---
 
-# Create a new conda environment
-conda create -n spyketorchproject python=3
-conda activate spyketorchproject
+## What’s New in This Fork
 
-# Install all the dependencies
+### Major Improvements
+- **Dynamic Decay Support**: Introduced decay factors in potential accumulation to handle moving patterns and improve temporal selectivity.
+- **Flexible Firing Logic**: Rewrote `fire()` and `learn()` mechanisms to allow precise spiking, thresholding, and resetting of membrane potentials.
+- **Temporal Learning Rate**: Learning rate now dynamically adapts based on spike timing proximity and receptive field contribution.
+- **K-Winners Adaptation**: Switched from fixed KWTA to a more dynamic or even all-spike learning strategy after early training phases.
+- **Pointwise Inhibition**: Added inhibition mechanisms across kernels and channels to prevent kernel collapse.
+- **Improved STDP Rules**: Replaced static pre-post ordering with temporal relevance-based updates.
+
+### Addressed Issues in Original Implementation
+- Static input assumptions (spikes stay on once fired).
+- Lack of decay support causing mushy activations on realistic data.
+- Pre-post spike pairing based on fixed time windows rather than actual contribution.
+- Kernel dominance due to output-channel-only inhibition.
+- KWTA causing underutilization of late spikes.
+
+### New Results
+- Achieved **95.63% accuracy** on normalized N-Caltech101 data using:
+  - Pointwise inhibition
+  - Simple dynamic thresholding
+  - Radicalized weight updates
+- Preliminary visual inspection shows improved feature distinctiveness across layers, despite persistent dominance of horizontal patterns in early layers.
+
+---
+
+The original SpykeTorch was excellent for stylized, event-converted MNIST data. However, for real event data with high temporal resolution and motion, additional mechanisms are necessary to preserve the spatiotemporal richness and avoid overfitting to biased patterns.
+
+This version aims to be a stepping stone toward more robust, biologically plausible, and efficient SNN training pipelines compatible with dynamic real-world data.
+
+---
+
+## 🚀 Getting Started
+
+### Installation (via Conda)
+```bash
+git clone https://github.com/your-username/SpykeTorchPlus.git
+cd SpykeTorchPlus
+conda create -n spyketorchplus python=3.9
+conda activate spyketorchplus
 pip install -r requirements.txt
-```
-```
-# Alternatively, one can just run the following command
-pip install git+https://github.com/miladmozafari/SpykeTorch.git
-```
-
-**Scripts info:**
- - [`MozafariShallow.py`](MozafariShallow.py): Reimplementation of the paper "First-Spike-Based Visual Categorization Using Reward-Modulated STDP" (https://ieeexplore.ieee.org/document/8356226/).
- - [`MozafariDeep.py`](MozafariDeep.py): Reimplementation of the paper "Bio-Inspired Digit Recognition Using Reward-Modulated Spike-Timing-Dependent Plasticity in Deep Convolutional Networks" (https://www.sciencedirect.com/science/article/abs/pii/S0031320319301906).
- - [`KheradpishehDeep.py`](KheradpishehDeep.py): Reimplementation of the paper "STDP-based spiking deep convolutional neural networks for object recognition" (https://www.sciencedirect.com/science/article/pii/S0893608017302903).
- - [`tutorial.ipynb`](tutorial.ipynb): A brief tutorial on designing, training, and evaluating a SNN with SpykeTorch.
-
