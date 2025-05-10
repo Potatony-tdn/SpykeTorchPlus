@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as fn
-import functional as sf
+from . import functional as sf
 from torch.nn.parameter import Parameter
-from utils import to_pair
+from .utils import to_pair
 
 class Convolution(nn.Module):
     r"""Performs a 2D convolution over an input spike-wave composed of several input

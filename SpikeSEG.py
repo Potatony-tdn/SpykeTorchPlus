@@ -29,7 +29,6 @@ from tqdm import tqdm
 from datetime import datetime
 from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
-import seaborn as sns
 from matplotlib.animation import FuncAnimation
 import random
 import copy

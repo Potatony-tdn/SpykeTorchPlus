@@ -3,3 +3,5 @@ torchvision
 numpy
 Pillow
 matplotlib
+tqdm
+scikit-learn
