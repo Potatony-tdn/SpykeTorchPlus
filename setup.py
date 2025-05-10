@@ -1,7 +1,7 @@
 import os
 import setuptools
 
-with open(os.path.join(os.path.dirname(__file__),"SpykeTorch/VERSION")) as f:
+with open(os.path.join(os.path.dirname(__file__),"SpykeTorchPlus/VERSION")) as f:
     version = f.read().strip() 
 
 
@@ -15,14 +15,14 @@ def get_requirements():
 
     
 setuptools.setup(
-    name="SpykeTorchPlus", # Replace with your own username
+    name="SpykeTorchPlus",
     version=version,
-    author="Muxiao Liu",
+    author="Muxiao Liu (forked from Milad Mozafari)",
     author_email="",
-    description="description="Enhanced simulator of spiking convolutional neural networks with realistic event data support, temporal dynamics, and extended STDP.",
+    description="Enhanced simulator of spiking convolutional neural networks with realistic event data support, temporal dynamics, and extended STDP.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="", # write github url,
+    url="https://github.com/Potatony-tdn/SpykeTorchPlus",
     packages=setuptools.find_packages(),
     install_requires=get_requirements(),
     python_requires='>=3.6',
